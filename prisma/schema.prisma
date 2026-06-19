@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  RSS
+  API
+  SCRAPER
+}
+
+enum ArticleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SENT
+}
+
+model Source {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String     @unique @db.VarChar(100)
+  type      SourceType
+  baseUrl   String?    @map("base_url") @db.Text
+  config    Json       @default("{}") @db.JsonB
+  isActive  Boolean    @default(true) @map("is_active")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  articles  Article[]
+
+  @@map("sources")
+}
+
+model Topic {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  slug      String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  articles     ArticleTopic[]
+  subscribers  SubscriberTopic[]
+
+  @@map("topics")
+}
+
+model Article {
+  id             String        @id @default(uuid()) @db.Uuid
+  sourceId       String        @map("source_id") @db.Uuid
+  title          String        @db.Text
+  url            String        @db.Text
+  contentSnippet String?       @map("content_snippet") @db.Text
+  author         String?       @db.VarChar(255)
+  publishedAt    DateTime?     @map("published_at") @db.Timestamptz
+  fetchedAt      DateTime      @default(now()) @map("fetched_at") @db.Timestamptz
+  urlHash        String        @map("url_hash") @db.VarChar(64)
+  status         ArticleStatus @default(PENDING)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  source   Source         @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  topics   ArticleTopic[]
+
+  @@unique([urlHash])
+  @@index([status])
+  @@map("articles")
+}
+
+model ArticleTopic {
+  articleId String @map("article_id") @db.Uuid
+  topicId   String @map("topic_id") @db.Uuid
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, topicId])
+  @@map("article_topics")
+}
+
+model Subscriber {
+  id             String   @id @default(uuid()) @db.Uuid
+  telegramChatId BigInt   @unique @map("telegram_chat_id")
+  username       String?  @db.VarChar(255)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  topics SubscriberTopic[]
+
+  @@map("subscribers")
+}
+
+model SubscriberTopic {
+  subscriberId String @map("subscriber_id") @db.Uuid
+  topicId      String @map("topic_id") @db.Uuid
+
+  subscriber Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([subscriberId, topicId])
+  @@map("subscriber_topics")
+}
+
+model ExecutionLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  runType      String    @map("run_type") @db.VarChar(50)
+  status       String    @db.VarChar(20)
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz
+  errorMessage String?   @map("error_message") @db.Text
+  metadata     Json      @default("{}") @map("metadata") @db.JsonB
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("execution_logs")
+}
