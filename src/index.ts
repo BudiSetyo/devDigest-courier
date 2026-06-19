@@ -3,13 +3,18 @@ import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { getRedisConnection } from "./lib/redis.js";
 import { healthRouter } from "./api/routes/health.js";
+import { initQueues } from "./lib/queues.js";
+import { telegramRouter } from "./routes/telegram.routes.js";
 
 async function main() {
   const app = express();
 
   app.use(express.json());
 
+  initQueues();
+
   app.use("/health", healthRouter);
+  app.use("/api/v1", telegramRouter);
 
   app.listen(env.PORT, () => {
     console.log(`[api] DevDigest Courier listening on port ${env.PORT}`);
