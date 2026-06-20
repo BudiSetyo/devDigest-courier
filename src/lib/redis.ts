@@ -4,7 +4,6 @@ import { env } from "../config/env.js";
 function buildRedisOptions() {
   const common = {
     maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
     lazyConnect: true,
     retryStrategy(times: number) {
       if (times > 10) return null;
@@ -48,7 +47,6 @@ export function getRedisConnection(): Redis {
   if (env.REDIS_URL) {
     connection = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
       lazyConnect: true,
       retryStrategy(times: number) {
         if (times > 10) return null;
