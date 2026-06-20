@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.example
+*.log
+.DS_Store
+.git
+.gitignore
+logs
+README.md
+vitest.config.ts
+ngrok.yml
