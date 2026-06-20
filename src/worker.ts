@@ -1,5 +1,9 @@
 import { getRedisConnection, closeRedisConnection } from "./lib/redis.js";
 import { prisma } from "./lib/prisma.js";
+import { createDigestTriggerWorker } from "./workers/digest-trigger.worker.js";
+import { createArticleProcessorWorker } from "./workers/article-processor.worker.js";
+import { createTelegramDispatchWorker } from "./workers/telegram-dispatch.worker.js";
+import { setupScheduler } from "./lib/scheduler.js";
 
 async function main() {
   const redis = getRedisConnection();
@@ -7,10 +11,11 @@ async function main() {
   await redis.connect();
   console.log("[worker] Redis connected");
 
-  // TODO: Register BullMQ workers here once business logic is implemented.
-  // Example:
-  // const fetchWorker = new Worker("fetch-articles", async (job) => { ... }, { connection: redis });
-  // const digestWorker = new Worker("send-digest", async (job) => { ... }, { connection: redis });
+  createDigestTriggerWorker();
+  createArticleProcessorWorker();
+  createTelegramDispatchWorker();
+
+  await setupScheduler();
 
   console.log("[worker] Workers registered, waiting for jobs...");
 }

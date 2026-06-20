@@ -12,6 +12,8 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .transform((v) => v === "true"),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
+  NGROK_AUTHTOKEN: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DIGEST_CRON: z.string().default("0 8 * * *"),
