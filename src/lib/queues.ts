@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import { getRedisOptions } from "./redis.js";
+import { logger } from "./logger.js";
 
 let digestTriggerQueue: Queue | null = null;
 let articleProcessingQueue: Queue | null = null;
@@ -36,7 +37,7 @@ export function initQueues(): void {
   getDigestTriggerQueue();
   getArticleProcessingQueue();
   getTelegramDispatchQueue();
-  console.log("[queues] BullMQ queues initialized");
+  logger.info("BullMQ queues initialized");
 }
 
 export async function closeAllQueues(): Promise<void> {
@@ -53,5 +54,5 @@ export async function closeAllQueues(): Promise<void> {
   digestTriggerQueue = null;
   articleProcessingQueue = null;
   telegramDispatchQueue = null;
-  console.log("[queues] All BullMQ queues closed");
+  logger.info("All BullMQ queues closed");
 }

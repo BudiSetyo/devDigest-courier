@@ -1,5 +1,6 @@
 import { Telegraf } from "telegraf";
 import { env } from "../lib/env.js";
+import { logger } from "../lib/logger.js";
 
 class TelegramService {
   private bot: Telegraf | null = null;
@@ -15,13 +16,13 @@ class TelegramService {
     const bot = this.getBot();
 
     if (webhookUrl) {
-      const hookPath = "/api/v1/telegram/webhooks/telegram";
+      const hookPath = "/api/v1/telegram";
       const fullUrl = `${webhookUrl.replace(/\/$/, "")}${hookPath}`;
       await bot.telegram.setWebhook(fullUrl);
-      console.log(`[telegram] Webhook set to ${fullUrl}`);
+      logger.info(`Webhook set to ${fullUrl}`);
     } else {
       await bot.launch();
-      console.log("[telegram] Bot started in polling mode");
+      logger.info("Bot started in polling mode");
     }
   }
 

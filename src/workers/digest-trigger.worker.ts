@@ -3,6 +3,7 @@ import { getRedisOptions } from "../lib/redis.js";
 import { prisma } from "../lib/prisma.js";
 import { fetchAllSources } from "../services/fetcher.service.js";
 import { getArticleProcessingQueue } from "../lib/queues.js";
+import { logger } from "../lib/logger.js";
 import type { NormalizedArticle } from "../services/fetcher.service.js";
 
 interface DigestTriggerJobData {
@@ -14,7 +15,7 @@ export function createDigestTriggerWorker(): Worker<DigestTriggerJobData> {
     "digest-trigger",
     async (job) => {
       const runType = job.data.runType ?? "scheduled";
-      console.log(`[digest-trigger] Job ${job.id} started (runType: ${runType})`);
+      logger.info(`Job ${job.id} started`, { runType });
 
       const log = await prisma.executionLog.create({
         data: {
@@ -39,9 +40,7 @@ export function createDigestTriggerWorker(): Worker<DigestTriggerJobData> {
             { articles, executionLogId: log.id },
             { removeOnComplete: true, removeOnFail: 100 },
           );
-          console.log(
-            `[digest-trigger] Enqueued ${articles.length} articles for processing`,
-          );
+          logger.info(`Enqueued ${articles.length} articles for processing`);
         } else {
           await prisma.executionLog.update({
             where: { id: log.id },
@@ -51,10 +50,10 @@ export function createDigestTriggerWorker(): Worker<DigestTriggerJobData> {
               metadata: { fetchedCount: 0, reason: "no_articles" },
             },
           });
-          console.log("[digest-trigger] No articles fetched, marking complete");
+          logger.info("No articles fetched, marking complete");
         }
       } catch (err) {
-        console.error("[digest-trigger] Fatal error:", err);
+        logger.error("Digest trigger fatal error", { error: err });
         await prisma.executionLog
           .update({
             where: { id: log.id },
@@ -66,10 +65,7 @@ export function createDigestTriggerWorker(): Worker<DigestTriggerJobData> {
             },
           })
           .catch((updateErr) => {
-            console.error(
-              "[digest-trigger] Failed to update execution log:",
-              updateErr,
-            );
+            logger.error("Failed to update execution log", { error: updateErr });
           });
         throw err;
       }
@@ -77,6 +73,6 @@ export function createDigestTriggerWorker(): Worker<DigestTriggerJobData> {
     { connection: getRedisOptions() },
   );
 
-  console.log("[digest-trigger] Worker registered");
+  logger.info("Digest trigger worker registered");
   return worker;
 }

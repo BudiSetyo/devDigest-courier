@@ -4,6 +4,7 @@ import { initQueues, closeAllQueues } from "./lib/queues.js";
 import { registerServer, registerCleanup } from "./lib/shutdown.js";
 import { router } from "./routes/index.js";
 import { telegramService } from "./services/telegram.service.js";
+import { logger } from "./lib/logger.js";
 
 async function main() {
   const app = express();
@@ -15,7 +16,7 @@ async function main() {
   app.use("/api/v1", router);
 
   const server = app.listen(env.PORT, () => {
-    console.log(`[api] DevDigest Courier listening on port ${env.PORT}`);
+    logger.info(`DevDigest Courier listening on port ${env.PORT}`);
   });
 
   registerServer(server);
@@ -30,13 +31,13 @@ async function main() {
       addr: env.PORT,
       authtoken: env.NGROK_AUTHTOKEN,
     });
-    console.log(`[ngrok] Tunnel created: ${webhookUrl}`);
+    logger.info(`ngrok tunnel created: ${webhookUrl}`);
   }
 
   await telegramService.startBot(webhookUrl);
 }
 
 main().catch((err) => {
-  console.error("[api] Failed to start server:", err);
+  logger.error("Failed to start server", { error: err });
   process.exit(1);
 });

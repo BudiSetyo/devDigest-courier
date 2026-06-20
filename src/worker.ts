@@ -5,12 +5,13 @@ import { createDigestTriggerWorker } from "./workers/digest-trigger.worker.js";
 import { createArticleProcessorWorker } from "./workers/article-processor.worker.js";
 import { createTelegramDispatchWorker } from "./workers/telegram-dispatch.worker.js";
 import { setupScheduler } from "./lib/scheduler.js";
+import { logger } from "./lib/logger.js";
 
 async function main() {
   const redis = getRedisConnection();
 
   await redis.connect();
-  console.log("[worker] Redis connected");
+  logger.info("Redis connected");
 
   registerWorker(createDigestTriggerWorker());
   registerWorker(createArticleProcessorWorker());
@@ -19,10 +20,10 @@ async function main() {
 
   await setupScheduler();
 
-  console.log("[worker] Workers registered, waiting for jobs...");
+  logger.info("Workers registered, waiting for jobs...");
 }
 
 main().catch((err) => {
-  console.error("[worker] Failed to start:", err);
+  logger.error("Worker failed to start", { error: err });
   process.exit(1);
 });

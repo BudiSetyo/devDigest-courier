@@ -2,6 +2,7 @@ import { Router } from "express";
 import { telegramService } from "../services/telegram.service.js";
 import { prisma } from "../lib/prisma.js";
 import { getDigestTriggerQueue } from "../lib/queues.js";
+import { logger } from "../lib/logger.js";
 
 export const telegramRouter = Router();
 
@@ -26,11 +27,12 @@ bot.command("start", async (ctx) => {
     await ctx.reply(
       "Welcome to DevDigest Courier! You will receive daily programming news digests.\n\n" +
         "Use /subscribe to start receiving digests.\n" +
+        "Use /unsubscribe to stop receiving digests.\n" +
         "Use /status to check your subscription.\n" +
         "Use /logs to view recent execution logs.",
     );
   } catch (err) {
-    console.error("[telegram] /start error:", err);
+    logger.error("/start error", { error: err });
   }
 });
 
@@ -40,13 +42,14 @@ bot.command("help", async (ctx) => {
       "Available commands:\n" +
         "/start - Register to daily digests\n" +
         "/subscribe - Subscribe to daily programming news digests\n" +
+        "/unsubscribe - Unsubscribe from daily digests\n" +
         "/status - View your subscription status\n" +
         "/logs - View last 3 digest execution logs\n" +
         "/retry - Manually retry a failed digest\n" +
         "/help - Show this help message",
     );
   } catch (err) {
-    console.error("[telegram] /help error:", err);
+    logger.error("/help error", { error: err });
   }
 });
 
@@ -63,36 +66,19 @@ bot.command("subscribe", async (ctx) => {
       return;
     }
 
-    const topics = await prisma.topic.findMany();
-
-    if (topics.length === 0) {
-      await ctx.reply("No topics available yet. Topics will appear after seeding.");
+    if (subscriber.isActive) {
+      await ctx.reply("You are already subscribed to daily digests!");
       return;
     }
 
-    const existingTopics = await prisma.subscriberTopic.findMany({
-      where: { subscriberId: subscriber.id },
-      select: { topicId: true },
+    await prisma.subscriber.update({
+      where: { id: subscriber.id },
+      data: { isActive: true },
     });
-    const existingIds = new Set(existingTopics.map((t) => t.topicId));
-    const newTopics = topics.filter((t) => !existingIds.has(t.id));
 
-    if (newTopics.length > 0) {
-      await prisma.subscriberTopic.createMany({
-        data: newTopics.map((t) => ({
-          subscriberId: subscriber.id,
-          topicId: t.id,
-        })),
-        skipDuplicates: true,
-      });
-    }
-
-    const count = existingIds.size + newTopics.length;
-    await ctx.reply(
-      `You are now subscribed to ${count} programming topic${count > 1 ? "s" : ""}. You will receive daily digests!`,
-    );
+    await ctx.reply("You are now subscribed! You will receive daily programming news digests.");
   } catch (err) {
-    console.error("[telegram] /subscribe error:", err);
+    logger.error("/subscribe error", { error: err });
     await ctx.reply("Something went wrong. Please try again.").catch(() => {});
   }
 });
@@ -103,7 +89,6 @@ bot.command("status", async (ctx) => {
 
     const subscriber = await prisma.subscriber.findUnique({
       where: { telegramChatId: BigInt(chatId) },
-      include: { topics: { include: { topic: true } } },
     });
 
     if (!subscriber) {
@@ -111,22 +96,44 @@ bot.command("status", async (ctx) => {
       return;
     }
 
-    if (subscriber.topics.length === 0) {
-      await ctx.reply(
-        "You are registered but not subscribed to the digest yet.\n\n" +
-          "Use /subscribe to start receiving daily digests.",
-      );
+    if (subscriber.isActive) {
+      await ctx.reply("You are subscribed to daily programming news digests. Use /unsubscribe to stop receiving them.");
+    } else {
+      await ctx.reply("You are not subscribed. Use /subscribe to start receiving daily digests.");
+    }
+  } catch (err) {
+    logger.error("/status error", { error: err });
+    await ctx.reply("Failed to fetch status. Please try again.").catch(() => {});
+  }
+});
+
+bot.command("unsubscribe", async (ctx) => {
+  try {
+    const chatId = ctx.chat.id;
+
+    const subscriber = await prisma.subscriber.findUnique({
+      where: { telegramChatId: BigInt(chatId) },
+    });
+
+    if (!subscriber) {
+      await ctx.reply("You are not registered yet. Use /start to begin.");
       return;
     }
 
-    const topicList = subscriber.topics
-      .map((st) => `• ${st.topic.name} (${st.topic.slug})`)
-      .join("\n");
+    if (!subscriber.isActive) {
+      await ctx.reply("You are already unsubscribed.");
+      return;
+    }
 
-    await ctx.reply(`Your subscribed topics:\n${topicList}`);
+    await prisma.subscriber.update({
+      where: { id: subscriber.id },
+      data: { isActive: false },
+    });
+
+    await ctx.reply("You have been unsubscribed from daily digests. Use /subscribe to rejoin anytime!");
   } catch (err) {
-    console.error("[telegram] /status error:", err);
-    await ctx.reply("Failed to fetch status. Please try again.").catch(() => {});
+    logger.error("/unsubscribe error", { error: err });
+    await ctx.reply("Something went wrong. Please try again.").catch(() => {});
   }
 });
 
@@ -169,7 +176,7 @@ bot.command("logs", async (ctx) => {
       parse_mode: "Markdown",
     });
   } catch (err) {
-    console.error("[telegram] /logs error:", err);
+    logger.error("/logs error", { error: err });
     await ctx.reply("Failed to fetch logs. Please try again.").catch(() => {});
   }
 });
@@ -185,11 +192,11 @@ bot.command("retry", async (ctx) => {
       "🔄 Retrying digest generation... Check /logs in a few minutes.",
     );
   } catch (err) {
-    console.error("[telegram] /retry error:", err);
+    logger.error("/retry error", { error: err });
     await ctx.reply("Failed to trigger retry. Please try again.").catch(() => {});
   }
 });
 
-telegramRouter.post("/webhooks/telegram", (req, res) => {
+telegramRouter.post("/", (req, res) => {
   void bot.handleUpdate(req.body, res);
 });

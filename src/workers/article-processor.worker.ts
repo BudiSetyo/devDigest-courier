@@ -3,6 +3,7 @@ import { getRedisOptions } from "../lib/redis.js";
 import { prisma } from "../lib/prisma.js";
 import { generateUrlHash } from "../utils/hash.js";
 import { getTelegramDispatchQueue } from "../lib/queues.js";
+import { logger } from "../lib/logger.js";
 import type { NormalizedArticle } from "../services/fetcher.service.js";
 
 interface ArticleProcessingJobData {
@@ -15,9 +16,7 @@ export function createArticleProcessorWorker(): Worker<ArticleProcessingJobData>
     "article-processing",
     async (job) => {
       const { articles, executionLogId } = job.data;
-      console.log(
-        `[article-processor] Job ${job.id} processing ${articles.length} articles`,
-      );
+      logger.info(`Job ${job.id} processing ${articles.length} articles`);
 
       const sourceNames = [...new Set(articles.map((a) => a.source))];
 
@@ -72,9 +71,7 @@ export function createArticleProcessorWorker(): Worker<ArticleProcessingJobData>
         },
       });
 
-      console.log(
-        `[article-processor] Inserted ${insertedCount}/${articles.length} articles`,
-      );
+      logger.info(`Inserted ${insertedCount}/${articles.length} articles`);
 
       await getTelegramDispatchQueue().add(
         "dispatch-digest",
@@ -82,11 +79,11 @@ export function createArticleProcessorWorker(): Worker<ArticleProcessingJobData>
         { removeOnComplete: true, removeOnFail: 100 },
       );
 
-      console.log("[article-processor] Dispatched telegram dispatch job");
+      logger.info("Dispatched telegram dispatch job");
     },
     { connection: getRedisOptions() },
   );
 
-  console.log("[article-processor] Worker registered");
+  logger.info("Article processor worker registered");
   return worker;
 }

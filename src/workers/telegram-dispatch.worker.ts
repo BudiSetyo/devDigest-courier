@@ -3,6 +3,7 @@ import { getRedisOptions } from "../lib/redis.js";
 import { prisma } from "../lib/prisma.js";
 import { telegramService } from "../services/telegram.service.js";
 import { formatDigestMessage } from "../utils/formatter.js";
+import { logger } from "../lib/logger.js";
 
 interface TelegramDispatchJobData {
   executionLogId: string;
@@ -45,16 +46,14 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
     "telegram-dispatch",
     async (job) => {
       const { executionLogId } = job.data;
-      console.log(
-        `[telegram-dispatch] Job ${job.id} starting for execution ${executionLogId}`,
-      );
+      logger.info(`Job ${job.id} starting for execution ${executionLogId}`);
 
       const subscribers = await prisma.subscriber.findMany({
         where: { isActive: true },
       });
 
       if (subscribers.length === 0) {
-        console.log("[telegram-dispatch] No active subscribers");
+        logger.info("No active subscribers");
         await prisma.executionLog.update({
           where: { id: executionLogId },
           data: {
@@ -78,7 +77,7 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
       });
 
       if (pendingArticles.length === 0) {
-        console.log("[telegram-dispatch] No pending articles");
+        logger.info("No pending articles");
         await prisma.executionLog.update({
           where: { id: executionLogId },
           data: {
@@ -118,10 +117,9 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
           successCount++;
         } catch (err) {
           failCount++;
-          console.error(
-            `[telegram-dispatch] Failed to send to ${subscriber.telegramChatId}:`,
-            err instanceof Error ? err.message : err,
-          );
+          logger.error(`Failed to send to ${subscriber.telegramChatId}`, {
+            error: err instanceof Error ? err.message : err,
+          });
 
           if (isBlockedError(err)) {
             await prisma.subscriber
@@ -130,14 +128,11 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
                 data: { isActive: false },
               })
               .catch((updateErr) => {
-                console.error(
-                  `[telegram-dispatch] Failed to deactivate subscriber ${subscriber.id}:`,
-                  updateErr,
-                );
+                logger.error(`Failed to deactivate subscriber ${subscriber.id}`, {
+                  error: updateErr,
+                });
               });
-            console.warn(
-              `[telegram-dispatch] Deactivated subscriber ${subscriber.telegramChatId} (blocked bot)`,
-            );
+            logger.warn(`Deactivated subscriber ${subscriber.telegramChatId} (blocked bot)`);
           }
         }
       }
@@ -162,13 +157,13 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
         },
       });
 
-      console.log(
-        `[telegram-dispatch] Done: ${successCount} notified, ${failCount} failed, ${pendingArticles.length} articles sent`,
+      logger.info(
+        `Dispatch done: ${successCount} notified, ${failCount} failed, ${pendingArticles.length} articles sent`,
       );
     },
     { connection: getRedisOptions() },
   );
 
-  console.log("[telegram-dispatch] Worker registered");
+  logger.info("Telegram dispatch worker registered");
   return worker;
 }
