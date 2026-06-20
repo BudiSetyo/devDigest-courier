@@ -38,3 +38,20 @@ export function initQueues(): void {
   getTelegramDispatchQueue();
   console.log("[queues] BullMQ queues initialized");
 }
+
+export async function closeAllQueues(): Promise<void> {
+  const queues = [
+    digestTriggerQueue,
+    articleProcessingQueue,
+    telegramDispatchQueue,
+  ];
+  for (const queue of queues) {
+    if (queue) {
+      await queue.close();
+    }
+  }
+  digestTriggerQueue = null;
+  articleProcessingQueue = null;
+  telegramDispatchQueue = null;
+  console.log("[queues] All BullMQ queues closed");
+}

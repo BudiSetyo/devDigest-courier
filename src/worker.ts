@@ -1,5 +1,6 @@
-import { getRedisConnection, closeRedisConnection } from "./lib/redis.js";
-import { prisma } from "./lib/prisma.js";
+import { getRedisConnection } from "./lib/redis.js";
+import { closeAllQueues } from "./lib/queues.js";
+import { registerWorker, registerCleanup } from "./lib/shutdown.js";
 import { createDigestTriggerWorker } from "./workers/digest-trigger.worker.js";
 import { createArticleProcessorWorker } from "./workers/article-processor.worker.js";
 import { createTelegramDispatchWorker } from "./workers/telegram-dispatch.worker.js";
@@ -11,9 +12,10 @@ async function main() {
   await redis.connect();
   console.log("[worker] Redis connected");
 
-  createDigestTriggerWorker();
-  createArticleProcessorWorker();
-  createTelegramDispatchWorker();
+  registerWorker(createDigestTriggerWorker());
+  registerWorker(createArticleProcessorWorker());
+  registerWorker(createTelegramDispatchWorker());
+  registerCleanup(() => closeAllQueues());
 
   await setupScheduler();
 
@@ -24,13 +26,3 @@ main().catch((err) => {
   console.error("[worker] Failed to start:", err);
   process.exit(1);
 });
-
-async function shutdown() {
-  console.log("[worker] Shutting down...");
-  await prisma.$disconnect();
-  await closeRedisConnection();
-  process.exit(0);
-}
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);

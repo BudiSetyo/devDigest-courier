@@ -10,6 +10,36 @@ interface TelegramDispatchJobData {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function isBlockedError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as Record<string, unknown>;
+  if (e.code === 403) return true;
+  if (e.error_code === 403) return true;
+  if (
+    e.response &&
+    typeof e.response === "object" &&
+    e.response !== null &&
+    (e.response as Record<string, unknown>).error_code === 403
+  )
+    return true;
+  if (
+    typeof e.description === "string" &&
+    e.description.toLowerCase().includes("blocked")
+  )
+    return true;
+  if (
+    e.response &&
+    typeof e.response === "object" &&
+    e.response !== null &&
+    typeof (e.response as Record<string, unknown>).description === "string" &&
+    ((e.response as Record<string, unknown>).description as string)
+      .toLowerCase()
+      .includes("blocked")
+  )
+    return true;
+  return false;
+}
+
 export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> {
   const worker = new Worker<TelegramDispatchJobData>(
     "telegram-dispatch",
@@ -92,6 +122,23 @@ export function createTelegramDispatchWorker(): Worker<TelegramDispatchJobData> 
             `[telegram-dispatch] Failed to send to ${subscriber.telegramChatId}:`,
             err instanceof Error ? err.message : err,
           );
+
+          if (isBlockedError(err)) {
+            await prisma.subscriber
+              .update({
+                where: { id: subscriber.id },
+                data: { isActive: false },
+              })
+              .catch((updateErr) => {
+                console.error(
+                  `[telegram-dispatch] Failed to deactivate subscriber ${subscriber.id}:`,
+                  updateErr,
+                );
+              });
+            console.warn(
+              `[telegram-dispatch] Deactivated subscriber ${subscriber.telegramChatId} (blocked bot)`,
+            );
+          }
         }
       }
 
