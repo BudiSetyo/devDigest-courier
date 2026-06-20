@@ -8,8 +8,8 @@ Event-driven backend that aggregates coding news and sends daily digests to Tele
 ┌─────────────────────────────────────────────────────────────────┐
 │                        API Server (:3000)                       │
 │  ┌───────────────┐  ┌───────────────┐  ┌────────────────────┐  │
-│  │ Health Check   │  │ Admin Trigger │  │ Telegram Webhook   │  │
-│  │ GET /health    │  │ POST /admin   │  │ POST /telegram     │  │
+│  │ Health Check   │  │ Admin Trigger │  │ Telegram Webhook  │  │
+│  │ GET /health    │  │ POST /admin   │  │ POST /telegram    │  │
 │  └───────────────┘  └──────┬────────┘  └─────────┬──────────┘  │
 │                            │                      │             │
 │                            ▼                      ▼             │
@@ -68,6 +68,8 @@ Event-driven backend that aggregates coding news and sends daily digests to Tele
 | Database | PostgreSQL (Neon) via Prisma |
 | Telegram Bot | Telegraf |
 | Validation | Zod |
+| Logging | Winston + Daily Rotate File |
+| Testing | Vitest + Supertest |
 | Dev Tunnel | ngrok (auto-provisioned) |
 
 ## Pipeline Flow
@@ -171,8 +173,9 @@ npm run start:worker
 | Command | Description |
 |---|---|
 | `/start` | Register as a subscriber |
-| `/subscribe` | Subscribe to all available topics |
-| `/status` | View your current topic subscriptions |
+| `/subscribe` | Start receiving daily digests |
+| `/unsubscribe` | Stop receiving daily digests |
+| `/status` | View subscription status |
 | `/logs` | View the last 3 digest execution logs |
 | `/retry` | Manually trigger a new digest |
 | `/help` | Show available commands |
@@ -210,6 +213,29 @@ curl http://localhost:3000/api/v1/health
 # {"status":"healthy"}
 ```
 
+## Testing
+
+```bash
+# Run tests once
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+Tests use `vitest` with `supertest` for HTTP assertions and `vi.mock()` to stub external dependencies (Prisma, BullMQ, Telegram service).
+
+## Logging
+
+Logs are written via Winston to `./logs/` (gitignored):
+
+| File | Level | Rotation |
+|---|---|---|
+| `combined-YYYY-MM-DD.log` | info + warn + error | Daily, 14-day retention |
+| `error-YYYY-MM-DD.log` | error only | Daily, 14-day retention |
+
+In development, logs are also printed to the console with colorized output.
+
 ## Project Structure
 
 ```
@@ -223,7 +249,8 @@ src/
 │   ├── prisma.ts                     # Prisma client singleton
 │   ├── queues.ts                     # BullMQ queue factories
 │   ├── scheduler.ts                  # CRON repeatable job setup
-│   └── shutdown.ts                   # Graceful shutdown
+│   ├── shutdown.ts                   # Graceful shutdown
+│   └── logger.ts                     # Winston file + console logger
 ├── services/
 │   ├── telegram.service.ts           # Telegraf bot wrapper
 │   └── fetcher.service.ts            # HackerNews + Dev.to fetchers
@@ -239,7 +266,10 @@ src/
 └── routes/
     ├── index.ts                      # Route aggregator
     ├── admin.routes.ts               # Manual trigger
-    └── telegram.routes.ts            # Bot commands + webhook
+    ├── telegram.routes.ts            # Bot commands + webhook
+    └── __tests__/
+        ├── admin.routes.test.ts      # Admin route tests
+        └── telegram.routes.test.ts   # Telegram webhook tests
 prisma/
 └── schema.prisma                     # Database schema
 ```
