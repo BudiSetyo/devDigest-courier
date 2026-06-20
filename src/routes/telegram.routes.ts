@@ -24,10 +24,9 @@ bot.command("start", async (ctx) => {
     });
 
     await ctx.reply(
-      "Welcome to DevDigest Courier! You will receive daily coding news digests.\n\n" +
-        "Use /topics to see available topics.\n" +
-        "Use /subscribe <topic> to pick topics.\n" +
-        "Use /status to see your subscriptions.\n" +
+      "Welcome to DevDigest Courier! You will receive daily programming news digests.\n\n" +
+        "Use /subscribe to start receiving digests.\n" +
+        "Use /status to check your subscription.\n" +
         "Use /logs to view recent execution logs.",
     );
   } catch (err) {
@@ -39,10 +38,9 @@ bot.command("help", async (ctx) => {
   try {
     await ctx.reply(
       "Available commands:\n" +
-        "/start - Subscribe to daily digests\n" +
-        "/topics - List available topics\n" +
-        "/subscribe <topic> - Subscribe to a topic (e.g. /subscribe javascript)\n" +
-        "/status - View your subscribed topics\n" +
+        "/start - Register to daily digests\n" +
+        "/subscribe - Subscribe to daily programming news digests\n" +
+        "/status - View your subscription status\n" +
         "/logs - View last 3 digest execution logs\n" +
         "/retry - Manually retry a failed digest\n" +
         "/help - Show this help message",
@@ -55,84 +53,47 @@ bot.command("help", async (ctx) => {
 bot.command("subscribe", async (ctx) => {
   try {
     const chatId = ctx.chat.id;
-    const args = ctx.message.text
-      .split(" ")
-      .slice(1)
-      .join(" ")
-      .trim()
-      .toLowerCase();
-
-    if (!args) {
-      await ctx.reply(
-        "Usage: /subscribe <topic>\nExample: /subscribe javascript",
-      );
-      return;
-    }
 
     const subscriber = await prisma.subscriber.findUnique({
       where: { telegramChatId: BigInt(chatId) },
     });
 
     if (!subscriber) {
-      await ctx.reply("Please use /start first to subscribe to the digest.");
+      await ctx.reply("Please use /start first to register.");
       return;
     }
 
-    let topic = await prisma.topic.findUnique({ where: { slug: args } });
-    if (!topic) {
-      topic = await prisma.topic.findFirst({
-        where: { name: { equals: args, mode: "insensitive" } },
+    const topics = await prisma.topic.findMany();
+
+    if (topics.length === 0) {
+      await ctx.reply("No topics available yet. Topics will appear after seeding.");
+      return;
+    }
+
+    const existingTopics = await prisma.subscriberTopic.findMany({
+      where: { subscriberId: subscriber.id },
+      select: { topicId: true },
+    });
+    const existingIds = new Set(existingTopics.map((t) => t.topicId));
+    const newTopics = topics.filter((t) => !existingIds.has(t.id));
+
+    if (newTopics.length > 0) {
+      await prisma.subscriberTopic.createMany({
+        data: newTopics.map((t) => ({
+          subscriberId: subscriber.id,
+          topicId: t.id,
+        })),
+        skipDuplicates: true,
       });
     }
-    if (!topic) {
-      await ctx.reply(
-        `Topic "${args}" not found. Use /topics to see available topics.`,
-      );
-      return;
-    }
 
-    await prisma.subscriberTopic.upsert({
-      where: {
-        subscriberId_topicId: {
-          subscriberId: subscriber.id,
-          topicId: topic.id,
-        },
-      },
-      update: {},
-      create: {
-        subscriberId: subscriber.id,
-        topicId: topic.id,
-      },
-    });
-
-    await ctx.reply(`Subscribed to *${topic.name}*`, {
-      parse_mode: "Markdown",
-    });
+    const count = existingIds.size + newTopics.length;
+    await ctx.reply(
+      `You are now subscribed to ${count} programming topic${count > 1 ? "s" : ""}. You will receive daily digests!`,
+    );
   } catch (err) {
     console.error("[telegram] /subscribe error:", err);
     await ctx.reply("Something went wrong. Please try again.").catch(() => {});
-  }
-});
-
-bot.command("topics", async (ctx) => {
-  try {
-    const topics = await prisma.topic.findMany({ orderBy: { name: "asc" } });
-
-    if (topics.length === 0) {
-      await ctx.reply(
-        "No topics available yet. Topics will appear after seeding.",
-      );
-      return;
-    }
-
-    const topicList = topics
-      .map((t) => `• ${t.name} (/subscribe ${t.slug})`)
-      .join("\n");
-
-    await ctx.reply(`Available topics:\n${topicList}`);
-  } catch (err) {
-    console.error("[telegram] /topics error:", err);
-    await ctx.reply("Failed to fetch topics. Please try again.").catch(() => {});
   }
 });
 
@@ -146,14 +107,14 @@ bot.command("status", async (ctx) => {
     });
 
     if (!subscriber) {
-      await ctx.reply("You are not subscribed yet. Use /start to begin.");
+      await ctx.reply("You are not registered yet. Use /start to begin.");
       return;
     }
 
     if (subscriber.topics.length === 0) {
       await ctx.reply(
-        "You are subscribed to the daily digest but have not picked any topics yet.\n\n" +
-          "Use /subscribe <topic> to pick a topic.",
+        "You are registered but not subscribed to the digest yet.\n\n" +
+          "Use /subscribe to start receiving daily digests.",
       );
       return;
     }
