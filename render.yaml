@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: dev-digest-courier-api
+    runtime: docker
+    plan: free
+    dockerCommand: node dist/index.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DIGEST_CRON
+        value: "0 8 * * *"
+      - key: DIGEST_MAX_ARTICLES
+        value: "10"
+
+  - type: worker
+    name: dev-digest-courier-worker
+    runtime: docker
+    plan: free
+    dockerCommand: node dist/worker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: DIGEST_CRON
+        value: "0 8 * * *"
